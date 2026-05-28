@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solar System — HTML5 Canvas Graphics Pipeline Demo</title>
+  <style>
+    /* ─── Reset & base ─────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #05060f;
+      --panel: rgba(255,255,255,0.05);
+      --border: rgba(255,255,255,0.12);
+      --accent: #f0a500;
+      --text: #e8eaf6;
+      --muted: #7986cb;
+      --font: 'Courier New', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow-x: hidden;
+    }
+
+    /* ─── Header ────────────────────────────────────────── */
+    header {
+      width: 100%;
+      max-width: 1100px;
+      padding: 1.5rem 2rem 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+    header h1 {
+      font-size: 1.2rem;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    header p {
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-align: right;
+      line-height: 1.6;
+    }
+
+    /* ─── Main layout ───────────────────────────────────── */
+    main {
+      width: 100%;
+      max-width: 1100px;
+      padding: 0 1rem 2rem;
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 1rem;
+    }
+
+    /* ─── Canvas wrapper ────────────────────────────────── */
+    .canvas-wrap {
+      position: relative;
+      background: radial-gradient(ellipse at center, #0b0d2a 0%, #05060f 70%);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      aspect-ratio: 1 / 1;
+    }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    /* ─── Stage badge overlay ──────────────────────────── */
+    .stage-badge {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      color: rgba(255,255,255,0.35);
+      text-transform: uppercase;
+      pointer-events: none;
+    }
+
+    /* ─── Side panel ────────────────────────────────────── */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.85rem 1rem;
+    }
+    .card h2 {
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.6rem;
+    }
+
+    /* Pipeline stage indicators */
+    .stages { display: flex; flex-direction: column; gap: 0.4rem; }
+    .stage-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.72rem;
+      color: var(--muted);
+      transition: color 0.3s;
+    }
+    .stage-row.active { color: var(--accent); }
+    .stage-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--border);
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .stage-row.active .stage-dot { background: var(--accent); }
+
+    /* Controls */
+    .ctrl { display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.72rem; }
+    .ctrl label { display: flex; justify-content: space-between; align-items: center; color: var(--muted); }
+    .ctrl label span { color: var(--text); min-width: 36px; text-align: right; }
+    input[type=range] {
+      width: 100%;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    /* Buttons */
+    .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    button {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 0.68rem;
+      letter-spacing: 0.08em;
+      padding: 0.35rem 0.7rem;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s;
+    }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    button.active { border-color: var(--accent); color: var(--accent); }
+
+    /* Info table */
+    .info-table { font-size: 0.68rem; width: 100%; border-collapse: collapse; }
+    .info-table td { padding: 2px 0; vertical-align: top; }
+    .info-table td:first-child { color: var(--muted); width: 50%; }
+    .info-table td:last-child { color: var(--text); }
+
+    /* Pipeline log */
+    #pipe-log {
+      font-size: 0.6rem;
+      color: var(--muted);
+      line-height: 1.8;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+    #pipe-log span { color: var(--accent); }
+
+    /* Footer */
+    footer {
+      width: 100%;
+      text-align: center;
+      padding: 1rem;
+      font-size: 0.6rem;
+      color: rgba(255,255,255,0.2);
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Solar System Simulator</h1>
+    <p style="font-size:0.65rem;color:var(--muted);margin-top:0.2rem;">HTML5 Canvas · Graphics Pipeline Demo</p>
+  </div>
+  <p>Application Stage<br>Geometry Stage<br>Rasterization Stage</p>
+</header>
+
+<main>
+  <!-- ═══ CANVAS ════════════════════════════════════════ -->
+  <div class="canvas-wrap">
+    <canvas id="scene"></canvas>
+    <div class="stage-badge">Rasterization — pixels written to framebuffer</div>
+  </div>
+
+  <!-- ═══ SIDE PANEL ════════════════════════════════════ -->
+  <div class="panel">
+
+    <!-- Pipeline stages -->
+    <div class="card">
+      <h2>Graphics Pipeline</h2>
+      <div class="stages">
+        <div class="stage-row active" id="st-app">
+          <div class="stage-dot"></div>Application Stage
+        </div>
+        <div class="stage-row" id="st-geo">
+          <div class="stage-dot"></div>Geometry Stage
+        </div>
+        <div class="stage-row" id="st-ras">
+          <div class="stage-dot"></div>Rasterization Stage
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card">
+      <h2>Controls</h2>
+      <div class="ctrl">
+        <label>Speed <span id="lbl-speed">1.0×</span></label>
+        <input type="range" id="sl-speed" min="0" max="5" step="0.1" value="1" />
+
+        <label>Zoom <span id="lbl-zoom">1.0×</span></label>
+        <input type="range" id="sl-zoom" min="0.4" max="2" step="0.1" value="1" />
+
+        <label style="margin-top:0.3rem;">View mode</label>
+        <div class="btn-row">
+          <button id="btn-normal" class="active">Normal</button>
+          <button id="btn-wireframe">Wireframe</button>
+          <button id="btn-pause" id="btn-pause">Pause</button>
+        </div>
+
+        <label style="margin-top:0.3rem;">Show</label>
+        <div class="btn-row">
+          <button id="btn-orbits" class="active">Orbits</button>
+          <button id="btn-labels" class="active">Labels</button>
+          <button id="btn-trails" class="active">Trails</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Object info -->
+    <div class="card">
+      <h2>Object Info <span style="font-size:0.55rem;color:var(--muted)">(click planet)</span></h2>
+      <table class="info-table">
+        <tr><td>Name</td><td id="inf-name">—</td></tr>
+        <tr><td>Radius (px)</td><td id="inf-radius">—</td></tr>
+        <tr><td>Orbit radius</td><td id="inf-orbit">—</td></tr>
+        <tr><td>Angle (°)</td><td id="inf-angle">—</td></tr>
+        <tr><td>Speed (rad/s)</td><td id="inf-speed">—</td></tr>
+      </table>
+    </div>
+
+    <!-- Pipeline log -->
+    <div class="card">
+      <h2>Pipeline Log</h2>
+      <div id="pipe-log">Initialising scene…</div>
+    </div>
+
+  </div>
+</main>
+
+<footer>CLICK A PLANET TO INSPECT · SCROLL TO ZOOM · DRAG TO PAN</footer>
+
+<script>
+/*
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║  SOLAR SYSTEM — HTML5 CANVAS GRAPHICS PIPELINE DEMO         ║
+ * ║  Demonstrates: Application, Geometry, Rasterization stages   ║
+ * ╚══════════════════════════════════════════════════════════════╝
+ *
+ * The three classical real-time rendering pipeline stages are:
+ *
+ *  1. APPLICATION STAGE  — CPU: game/simulation logic, scene graph,
+ *                          input handling, culling decisions.
+ *
+ *  2. GEOMETRY STAGE     — Transforms vertices from object-space →
+ *                          world-space → camera/view-space →
+ *                          clip-space (projection). In our 2-D
+ *                          canvas demo this maps to: model matrix
+ *                          (planet's own translate/scale) and
+ *                          view matrix (pan + zoom).
+ *
+ *  3. RASTERIZATION STAGE — Converts geometric primitives (circles,
+ *                          lines, arcs) into discrete pixels on the
+ *                          canvas framebuffer; applies colour/shading
+ *                          and alpha compositing per pixel.
+ */
+
+'use strict';
+
+// ─────────────────────────────────────────────
+// SCENE SETUP  (Application Stage — data model)
+// ─────────────────────────────────────────────
+// [APP STAGE] The scene graph describes all objects, their properties,
+// and relationships. This is pure CPU-side simulation data.
+
+const CANVAS = document.getElementById('scene');
+const CTX    = CANVAS.getContext('2d');
+
+// World state
+let paused     = false;
+let wireframe  = false;
+let showOrbits = true;
+let showLabels = true;
+let showTrails = true;
+let speedMul   = 1.0;
+let zoom       = 1.0;
+let pan        = { x: 0, y: 0 };
+let selected   = null;
+let frame      = 0;
+
+// [APP STAGE] Camera / view-transform state
+let cam = { x: 0, y: 0, zoom: 1.0 };
+
+// [APP STAGE] Scene graph — each planet is an object with its own
+// model-space properties (radius, colour) plus orbital parameters.
+const SUN = {
+  name: 'Sun', radius: 38, colour: '#f0a500', glowCol: '#f0650055',
+  x: 0, y: 0,           // always at origin in world-space
+  isSun: true,
+  trail: []
+};
+
+const PLANETS = [
+  {
+    name: 'Mercury', radius: 6,  colour: '#b0b0b0',
+    orbitRadius: 80,  speed: 0.8,  angle: 0.4,
+    trail: [], maxTrail: 120
+  },
+  {
+    name: 'Venus',   radius: 11, colour: '#e8b96a',
+    orbitRadius: 130, speed: 0.5,  angle: 1.2,
+    trail: [], maxTrail: 150
+  },
+  {
+    name: 'Earth',   radius: 13, colour: '#4a90d9',
+    orbitRadius: 190, speed: 0.3,  angle: 2.1,
+    trail: [], maxTrail: 200,
+    moon: {
+      name: 'Moon', radius: 4, colour: '#cccccc',
+      orbitRadius: 28, speed: 2.4, angle: 0.0,
+      trail: [], maxTrail: 80
+    }
+  },
+  {
+    name: 'Mars',    radius: 9,  colour: '#c1440e',
+    orbitRadius: 260, speed: 0.2,  angle: 0.9,
+    trail: [], maxTrail: 250
+  },
+  {
+    name: 'Jupiter', radius: 24, colour: '#c88b3a',
+    orbitRadius: 360, speed: 0.08, angle: 3.5,
+    trail: [], maxTrail: 300
+  },
+  {
+    name: 'Saturn',  radius: 20, colour: '#e4d191',
+    orbitRadius: 460, speed: 0.05, angle: 1.8,
+    trail: [], maxTrail: 320,
+    hasRings: true
+  }
+];
+
+// Collect all objects for hit-testing
+const allBodies = [SUN, ...PLANETS];
+
+// ─────────────────────────────────────────────
+//  CANVAS RESIZE  (Application Stage)
+// ─────────────────────────────────────────────
+// [APP STAGE] Maintain a 1:1 device pixel mapping for sharp rendering.
+
+function resize() {
+  const wrap = CANVAS.parentElement;
+  CANVAS.width  = wrap.clientWidth;
+  CANVAS.height = wrap.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ─────────────────────────────────────────────
+//  GEOMETRY HELPERS  (Geometry Stage)
+// ─────────────────────────────────────────────
+// [GEOMETRY STAGE] These functions implement the model → world → view
+// transform chain that the geometry stage performs on every vertex.
+
+/**
+ * worldToScreen — applies view-matrix (pan + zoom) to a world-space
+ * coordinate, producing screen/canvas-space coordinates.
+ * Equivalent to:  screen = ViewMatrix × WorldPosition
+ */
+function worldToScreen(wx, wy) {
+  const cx = CANVAS.width  / 2 + pan.x;
+  const cy = CANVAS.height / 2 + pan.y;
+  return {
+    x: cx + wx * zoom,
+    y: cy + wy * zoom
+  };
+}
+
+/**
+ * screenToWorld — inverse view-transform, used for mouse hit-testing.
+ * Equivalent to:  world = ViewMatrix⁻¹ × ScreenPosition
+ */
+function screenToWorld(sx, sy) {
+  const cx = CANVAS.width  / 2 + pan.x;
+  const cy = CANVAS.height / 2 + pan.y;
+  return {
+    x: (sx - cx) / zoom,
+    y: (sy - cy) / zoom
+  };
+}
+
+/**
+ * computeWorldPos — model → world transform for an orbiting body.
+ * Applies the orbital rotation (model matrix) to place it in world-space.
+ * parentX/Y is the world-space position of the orbit's centre (e.g. Sun).
+ */
+function computeWorldPos(body, parentX = 0, parentY = 0) {
+  return {
+    x: parentX + Math.cos(body.angle) * body.orbitRadius,
+    y: parentY + Math.sin(body.angle) * body.orbitRadius
+  };
+}
+
+// ─────────────────────────────────────────────
+//  APPLICATION STAGE — Simulation Update
+// ─────────────────────────────────────────────
+// [APP STAGE] Per-frame physics/animation update. This runs entirely on
+// the CPU before any drawing occurs — classic separation of simulation
+// from rendering (application stage responsibility).
+
+function update(dt) {
+  if (paused) return;
+
+  for (const p of PLANETS) {
+    // [APP STAGE] Advance orbital angle by angular velocity × Δt
+    p.angle += p.speed * speedMul * dt;
+
+    // [APP STAGE] Model → world position for this planet
+    const wp = computeWorldPos(p);
+    p.worldX = wp.x;
+    p.worldY = wp.y;
+
+    // [APP STAGE] Record trail point (breadcrumb for later rasterization)
+    p.trail.push({ x: p.worldX, y: p.worldY });
+    if (p.trail.length > p.maxTrail) p.trail.shift();
+
+    // [APP STAGE] Update moon if planet has one
+    if (p.moon) {
+      const m = p.moon;
+      m.angle += m.speed * speedMul * dt;
+      const mp = computeWorldPos(m, p.worldX, p.worldY);
+      m.worldX = mp.x;
+      m.worldY = mp.y;
+      m.trail.push({ x: m.worldX, y: m.worldY });
+      if (m.trail.length > m.maxTrail) m.trail.shift();
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+//  RASTERIZATION STAGE — Drawing
+// ─────────────────────────────────────────────
+// [RASTERIZATION STAGE] Convert all geometric primitives (circles, arcs,
+// polylines) into coloured pixels on the canvas framebuffer. The Canvas 2D
+// API is the rasterizer here — each arc(), lineTo(), fill() call causes
+// the browser's software rasterizer to shade pixels.
+
+/* ---------- Rasterize: star field ---------- */
+// [RASTERIZATION STAGE] Background stars drawn once as filled 1-pixel
+// rects (point primitives) — rasterized as individual pixels.
+const STARS = Array.from({ length: 260 }, () => ({
+  x: Math.random() * 2000 - 1000,
+  y: Math.random() * 2000 - 1000,
+  r: Math.random() < 0.1 ? 1.2 : 0.5,
+  a: 0.3 + Math.random() * 0.7
+}));
+
+function drawStars() {
+  // [RASTERIZATION STAGE] Each star is a screen-space circle primitive
+  // rasterized into pixels with alpha compositing.
+  for (const s of STARS) {
+    const sp = worldToScreen(s.x, s.y);
+    CTX.globalAlpha = s.a;
+    CTX.fillStyle = '#ffffff';
+    CTX.beginPath();
+    CTX.arc(sp.x, sp.y, s.r * zoom, 0, Math.PI * 2);
+    CTX.fill();
+  }
+  CTX.globalAlpha = 1;
+}
+
+/* ---------- Rasterize: orbit ring ---------- */
+// [RASTERIZATION STAGE] Orbit paths are arc primitives (circle outlines).
+// The rasterizer converts the mathematical arc description into a
+// pixel-wide stroke on the framebuffer.
+function drawOrbit(orbitRadius, parentWX = 0, parentWY = 0) {
+  if (!showOrbits) return;
+  const sp = worldToScreen(parentWX, parentWY);
+  CTX.beginPath();
+  CTX.arc(sp.x, sp.y, orbitRadius * zoom, 0, Math.PI * 2);
+  CTX.strokeStyle = 'rgba(255,255,255,0.08)';
+  CTX.lineWidth = 1;
+  CTX.stroke();  // [RASTERIZATION STAGE] Stroke the arc → pixels written
+}
+
+/* ---------- Rasterize: trail ---------- */
+// [RASTERIZATION STAGE] Trails are polyline primitives formed by
+// connecting world-space breadcrumbs. Each moveTo/lineTo pair produces
+// a scan-converted line segment.
+function drawTrail(trail) {
+  if (!showTrails || trail.length < 2) return;
+  CTX.beginPath();
+  const p0 = worldToScreen(trail[0].x, trail[0].y);
+  CTX.moveTo(p0.x, p0.y);
+  for (let i = 1; i < trail.length; i++) {
+    const pt = worldToScreen(trail[i].x, trail[i].y);
+    CTX.lineTo(pt.x, pt.y);
+  }
+  // [RASTERIZATION STAGE] Gradient alpha along trail via lineWidth + alpha
+  CTX.strokeStyle = 'rgba(255,255,255,0.18)';
+  CTX.lineWidth = 1;
+  CTX.stroke();  // [RASTERIZATION STAGE] Scan-converts polyline to pixels
+}
+
+/* ---------- Rasterize: body (circle) ---------- */
+// [RASTERIZATION STAGE] Each planet/moon is a filled circle primitive.
+// The rasterizer fills all pixels inside the circle boundary, applying
+// the fillStyle colour with alpha compositing over the background.
+function drawBody(body, wx, wy, highlight = false) {
+  const sp = worldToScreen(wx, wy);
+  const r  = body.radius * zoom;
+
+  if (wireframe) {
+    // [RASTERIZATION STAGE] Wireframe mode: stroke only — rasterize the
+    // circle outline without filling interior pixels.
+    CTX.beginPath();
+    CTX.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+    CTX.strokeStyle = body.colour;
+    CTX.lineWidth = 1.5;
+    CTX.stroke();
+  } else {
+    // [RASTERIZATION STAGE] Filled mode: radial gradient simulates basic
+    // per-pixel shading (diffuse light from top-left). The gradient is a
+    // simplified fragment/pixel shader.
+    const grad = CTX.createRadialGradient(
+      sp.x - r * 0.3, sp.y - r * 0.3, r * 0.05,
+      sp.x, sp.y, r
+    );
+    grad.addColorStop(0, lighten(body.colour, 60));
+    grad.addColorStop(1, darken(body.colour, 40));
+
+    CTX.beginPath();
+    CTX.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+    CTX.fillStyle = grad;
+    CTX.fill();  // [RASTERIZATION STAGE] Fill pixels inside circle
+
+    // Selection ring
+    if (highlight) {
+      CTX.beginPath();
+      CTX.arc(sp.x, sp.y, r + 5, 0, Math.PI * 2);
+      CTX.strokeStyle = '#f0a500';
+      CTX.lineWidth = 1.5;
+      CTX.setLineDash([4, 3]);
+      CTX.stroke();  // [RASTERIZATION STAGE] Dashed selection ring
+      CTX.setLineDash([]);
+    }
+  }
+
+  // [RASTERIZATION STAGE] Labels — text rasterization converts vector
+  // font glyphs into pixels via the canvas text rasterizer.
+  if (showLabels) {
+    CTX.fillStyle = 'rgba(200,210,255,0.75)';
+    CTX.font = `${Math.max(9, 10 * zoom)}px 'Courier New', monospace`;
+    CTX.textAlign = 'center';
+    CTX.fillText(body.name, sp.x, sp.y - r - 5);  // [RASTERIZATION] text to pixels
+  }
+}
+
+/* ---------- Rasterize: Sun with glow ---------- */
+// [RASTERIZATION STAGE] The Sun uses layered radial gradients to
+// simulate a glow halo — this is a per-pixel colour computation
+// (analogous to a fragment shader) applied over the framebuffer.
+function drawSun() {
+  const sp = worldToScreen(0, 0);
+  const r  = SUN.radius * zoom;
+
+  if (!wireframe) {
+    // Outer glow — large translucent radial gradient
+    const glow = CTX.createRadialGradient(sp.x, sp.y, r * 0.5, sp.x, sp.y, r * 3.5);
+    glow.addColorStop(0, 'rgba(240,165,0,0.25)');
+    glow.addColorStop(1, 'rgba(240,165,0,0)');
+    CTX.beginPath();
+    CTX.arc(sp.x, sp.y, r * 3.5, 0, Math.PI * 2);
+    CTX.fillStyle = glow;
+    CTX.fill();  // [RASTERIZATION STAGE] Glow pixels written to framebuffer
+
+    // Core sphere
+    const core = CTX.createRadialGradient(
+      sp.x - r * 0.2, sp.y - r * 0.2, r * 0.1,
+      sp.x, sp.y, r
+    );
+    core.addColorStop(0, '#fff5cc');
+    core.addColorStop(0.5, '#f0a500');
+    core.addColorStop(1, '#b05000');
+    CTX.beginPath();
+    CTX.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+    CTX.fillStyle = core;
+    CTX.fill();  // [RASTERIZATION STAGE] Sun surface pixels
+  } else {
+    CTX.beginPath();
+    CTX.arc(sp.x, sp.y, r, 0, Math.PI * 2);
+    CTX.strokeStyle = '#f0a500';
+    CTX.lineWidth = 2;
+    CTX.stroke();
+  }
+
+  if (showLabels) {
+    CTX.fillStyle = '#f0a500';
+    CTX.font = `${Math.max(9, 11 * zoom)}px 'Courier New', monospace`;
+    CTX.textAlign = 'center';
+    CTX.fillText('Sun', sp.x, sp.y - SUN.radius * zoom - 6);
+  }
+}
+
+/* ---------- Rasterize: Saturn's rings ---------- */
+// [RASTERIZATION STAGE] Rings use a stroked ellipse arc — the
+// rasterizer scan-converts the ellipse outline into pixels.
+function drawRings(wx, wy, r) {
+  const sp = worldToScreen(wx, wy);
+  CTX.save();
+  CTX.translate(sp.x, sp.y);
+  CTX.scale(1, 0.32);  // [GEOMETRY STAGE] Non-uniform scale — squish Y to tilt rings
+  CTX.beginPath();
+  CTX.arc(0, 0, r * 1.85 * zoom, 0, Math.PI * 2);
+  CTX.strokeStyle = 'rgba(228,209,145,0.55)';
+  CTX.lineWidth = 6 * zoom;
+  CTX.stroke();  // [RASTERIZATION STAGE] Ellipse stroke → pixels
+  CTX.restore();
+}
+
+/* ---------- Rasterize: Moon orbit line ---------- */
+function drawMoonOrbit(planet) {
+  if (!showOrbits || !planet.moon) return;
+  const sp = worldToScreen(planet.worldX, planet.worldY);
+  CTX.beginPath();
+  CTX.arc(sp.x, sp.y, planet.moon.orbitRadius * zoom, 0, Math.PI * 2);
+  CTX.strokeStyle = 'rgba(255,255,255,0.05)';
+  CTX.lineWidth = 1;
+  CTX.stroke();
+}
+
+// ─────────────────────────────────────────────
+//  COLOUR UTILITIES  (Geometry / Rasterization)
+// ─────────────────────────────────────────────
+// [GEOMETRY → RASTERIZATION] Colour arithmetic used to derive
+// per-vertex/fragment colour values — analogous to vertex attributes
+// consumed by a fragment shader.
+
+function lighten(hex, amount) {
+  return adjustColour(hex, amount);
+}
+function darken(hex, amount) {
+  return adjustColour(hex, -amount);
+}
+function adjustColour(hex, amount) {
+  let r = parseInt(hex.slice(1, 3), 16);
+  let g = parseInt(hex.slice(3, 5), 16);
+  let b = parseInt(hex.slice(5, 7), 16);
+  r = Math.min(255, Math.max(0, r + amount));
+  g = Math.min(255, Math.max(0, g + amount));
+  b = Math.min(255, Math.max(0, b + amount));
+  return `rgb(${r},${g},${b})`;
+}
+
+// ─────────────────────────────────────────────
+//  MAIN RENDER LOOP
+// ─────────────────────────────────────────────
+// [APP STAGE]  requestAnimationFrame drives the render loop.
+// Each frame: Application → Geometry → Rasterization.
+
+let lastTime = 0;
+
+function render(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+
+  // ── APPLICATION STAGE ──────────────────────────────
+  // [APP STAGE] Update simulation state (orbital mechanics).
+  update(dt);
+  updatePipelineUI(frame);
+
+  // ── GEOMETRY STAGE ─────────────────────────────────
+  // [GEOMETRY STAGE] Compute all world→screen transforms.
+  // (Handled per-draw via worldToScreen calls below.)
+
+  // ── RASTERIZATION STAGE ────────────────────────────
+  // [RASTERIZATION STAGE] Clear framebuffer (background colour pass).
+  CTX.clearRect(0, 0, CANVAS.width, CANVAS.height);
+
+  // [RASTERIZATION STAGE] Draw star-field (background primitives).
+  drawStars();
+
+  // [RASTERIZATION STAGE] Draw orbit rings (arc primitives).
+  for (const p of PLANETS) {
+    drawOrbit(p.orbitRadius);
+    drawMoonOrbit(p);
+  }
+
+  // [RASTERIZATION STAGE] Draw trails (polyline primitives).
+  for (const p of PLANETS) {
+    drawTrail(p.trail);
+    if (p.moon) drawTrail(p.moon.trail);
+  }
+
+  // [RASTERIZATION STAGE] Draw Sun.
+  drawSun();
+
+  // [RASTERIZATION STAGE] Draw planets and moons.
+  for (const p of PLANETS) {
+    if (p.hasRings) drawRings(p.worldX, p.worldY, p.radius);
+    drawBody(p, p.worldX, p.worldY, selected === p);
+    if (p.moon) {
+      drawBody(p.moon, p.moon.worldX, p.moon.worldY, selected === p.moon);
+    }
+  }
+
+  // Update info panel if something selected
+  if (selected) updateInfoPanel(selected);
+
+  frame++;
+  requestAnimationFrame(render);
+}
+
+// ─────────────────────────────────────────────
+//  UI — Pipeline stage indicator
+// ─────────────────────────────────────────────
+// [APP STAGE] Cycle the stage highlight in the side panel to illustrate
+// which pipeline stage is conceptually executing.
+
+function updatePipelineUI(f) {
+  const rows = ['st-app', 'st-geo', 'st-ras'];
+  const idx  = Math.floor(f / 10) % 3;
+  rows.forEach((id, i) => {
+    document.getElementById(id).classList.toggle('active', i === idx);
+  });
+
+  // Pipeline log
+  const msgs = [
+    '<span>[APP]</span> Scene graph updated, physics stepped',
+    '<span>[GEO]</span> World→screen transforms applied',
+    '<span>[RAS]</span> Primitives rasterized to framebuffer',
+  ];
+  if (f % 10 === 0) {
+    const log = document.getElementById('pipe-log');
+    log.innerHTML = msgs[idx];
+  }
+}
+
+// ─────────────────────────────────────────────
+//  UI — Info panel
+// ─────────────────────────────────────────────
+function updateInfoPanel(b) {
+  document.getElementById('inf-name').textContent   = b.name;
+  document.getElementById('inf-radius').textContent = b.radius;
+  document.getElementById('inf-orbit').textContent  = b.orbitRadius ?? '—';
+  document.getElementById('inf-angle').textContent  = b.orbitRadius
+    ? (((b.angle * 180 / Math.PI) % 360 + 360) % 360).toFixed(1)
+    : '—';
+  document.getElementById('inf-speed').textContent  = b.speed?.toFixed(3) ?? '—';
+}
+
+// ─────────────────────────────────────────────
+//  INPUT HANDLING  (Application Stage)
+// ─────────────────────────────────────────────
+// [APP STAGE] All input processing is application-stage work — translating
+// user events into scene-graph mutations before the geometry + rasterization
+// stages process them next frame.
+
+/* Speed slider */
+document.getElementById('sl-speed').addEventListener('input', e => {
+  speedMul = parseFloat(e.target.value);
+  document.getElementById('lbl-speed').textContent = speedMul.toFixed(1) + '×';
+});
+
+/* Zoom slider */
+document.getElementById('sl-zoom').addEventListener('input', e => {
+  zoom = parseFloat(e.target.value);
+  document.getElementById('lbl-zoom').textContent = zoom.toFixed(1) + '×';
+});
+
+/* Mode buttons */
+document.getElementById('btn-normal').addEventListener('click', () => {
+  wireframe = false;
+  document.getElementById('btn-normal').classList.add('active');
+  document.getElementById('btn-wireframe').classList.remove('active');
+});
+document.getElementById('btn-wireframe').addEventListener('click', () => {
+  wireframe = true;
+  document.getElementById('btn-wireframe').classList.add('active');
+  document.getElementById('btn-normal').classList.remove('active');
+});
+document.getElementById('btn-pause').addEventListener('click', e => {
+  paused = !paused;
+  e.target.textContent = paused ? 'Play' : 'Pause';
+  e.target.classList.toggle('active', paused);
+});
+
+/* Toggle buttons */
+function makeToggle(id, flag) {
+  document.getElementById(id).addEventListener('click', e => {
+    const val = !eval(flag); // capture current
+    if      (flag === 'showOrbits') showOrbits = val;
+    else if (flag === 'showLabels') showLabels = val;
+    else if (flag === 'showTrails') showTrails = val;
+    e.target.classList.toggle('active', val);
+  });
+}
+makeToggle('btn-orbits', 'showOrbits');
+makeToggle('btn-labels', 'showLabels');
+makeToggle('btn-trails', 'showTrails');
+
+/* Canvas click — hit testing in world space */
+// [APP STAGE] Hit-test: transform mouse position through inverse
+// view-matrix into world-space, then check distance to each body.
+CANVAS.addEventListener('click', e => {
+  const rect = CANVAS.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (CANVAS.width / rect.width);
+  const my = (e.clientY - rect.top)  * (CANVAS.height / rect.height);
+  const wm = screenToWorld(mx, my);  // [GEOMETRY STAGE] Inverse view transform
+
+  let hit = null;
+  // Check sun
+  const dSun = Math.hypot(wm.x, wm.y);
+  if (dSun < SUN.radius + 6) hit = SUN;
+  // Check planets + moons
+  for (const p of PLANETS) {
+    if (!hit) {
+      const d = Math.hypot(wm.x - p.worldX, wm.y - p.worldY);
+      if (d < p.radius + 6) hit = p;
+    }
+    if (!hit && p.moon) {
+      const dm = Math.hypot(wm.x - p.moon.worldX, wm.y - p.moon.worldY);
+      if (dm < p.moon.radius + 6) hit = p.moon;
+    }
+  }
+  selected = hit;
+  if (!hit) {
+    ['inf-name','inf-radius','inf-orbit','inf-angle','inf-speed']
+      .forEach(id => document.getElementById(id).textContent = '—');
+  }
+});
+
+/* Mouse-wheel zoom */
+// [APP STAGE] Adjust view-matrix zoom parameter.
+CANVAS.addEventListener('wheel', e => {
+  e.preventDefault();
+  zoom = Math.min(3, Math.max(0.3, zoom - e.deltaY * 0.001));
+  document.getElementById('sl-zoom').value = zoom;
+  document.getElementById('lbl-zoom').textContent = zoom.toFixed(1) + '×';
+}, { passive: false });
+
+/* Drag to pan */
+// [APP STAGE] Modify camera pan offset (view-matrix translation).
+let dragging = false, dragStart = { x: 0, y: 0 }, panStart = { x: 0, y: 0 };
+CANVAS.addEventListener('mousedown', e => {
+  dragging = true;
+  dragStart  = { x: e.clientX, y: e.clientY };
+  panStart   = { ...pan };
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  pan.x = panStart.x + (e.clientX - dragStart.x);
+  pan.y = panStart.y + (e.clientY - dragStart.y);
+});
+window.addEventListener('mouseup', () => { dragging = false; });
+
+// ─────────────────────────────────────────────
+//  KICK OFF RENDER LOOP
+// ─────────────────────────────────────────────
+// [APP STAGE] Initial planet world positions before first frame.
+for (const p of PLANETS) {
+  const wp = computeWorldPos(p);
+  p.worldX = wp.x; p.worldY = wp.y;
+  if (p.moon) {
+    const mp = computeWorldPos(p.moon, p.worldX, p.worldY);
+    p.moon.worldX = mp.x; p.moon.worldY = mp.y;
+  }
+}
+
+requestAnimationFrame(render);  // Begin application → geometry → rasterization loop
+</script>
+</body>
+</html>
